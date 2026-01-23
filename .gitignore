@@ -1,0 +1,8 @@
+# Visual Studio & build files
+.vs/
+Debug/
+Release/
+ESHakuna*/
+
+# Euroscope specific files
+*.txt
