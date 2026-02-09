@@ -44,7 +44,7 @@ inline namespace GLOBAL {
 	inline CCISettings *pSettings;
 
 	inline const char *name = "Current Control Indicator";
-	inline const char *version = "rc1.1.0";
+	inline const char *version = "rc1.1.1";
 	inline const char *authors = "Michael Ott";
 	inline const char *license = "GPL v3";
 	inline const char *tag = "CCI";

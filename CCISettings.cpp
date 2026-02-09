@@ -147,8 +147,8 @@ void CCISettings::loadSettings() {
 		}
 	}
 
-	if (SettingString* data = std::get_if<SettingString>(&m_Settings.at(Settings::GLOBAL_VERSION))) {
-		if (strcmp(data->value, GLOBAL::version) != std::string::npos)
+	if (SettingString *data = std::get_if<SettingString>(&m_Settings.at(Settings::GLOBAL_VERSION))) {
+		if (strcmp(data->value, GLOBAL::version) != 0)
 			GLOBAL::pPlugIn->DisplayUserMessage(GLOBAL::tag, GLOBAL::tag, "The plugin is outdated! Please update using the installer (or manually).", true, true, true, true, true);
 	}
 
