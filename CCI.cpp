@@ -1,58 +1,8 @@
 #include "pch.h"
 #include "CCI.h"
+#include "CCIRadarScreen.h"
 #include <string>
 #include <format>
-
-HHOOK hHook;
-
-LRESULT CALLBACK llKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-	if (wParam == WM_KEYDOWN) {
-		KBDLLHOOKSTRUCT key = (*(KBDLLHOOKSTRUCT*)lParam);
-
-		if (key.vkCode == VK_END) {
-			// TODO: Find a way to execute a command here...
-			// Maybe just typing it out using keybd_event or SendInput?
-			GLOBAL::pPlugIn->DisplayUserMessage(
-				GLOBAL::tag, GLOBAL::tag,
-				GLOBAL::pPlugIn->RadarTargetSelectASEL().GetCallsign(),
-				true, false, false, false, false
-			);
-			
-			GLOBAL::pPlugIn->DisplayUserMessage(
-				GLOBAL::tag, GLOBAL::tag,
-				GLOBAL::pPlugIn->FlightPlanSelectASEL().GetCallsign(),
-				true, false, false, false, false
-			);
-			/*INPUT inputs[6] = {};
-			memset(inputs, 0, sizeof inputs);
-
-			inputs[0].type = INPUT_KEYBOARD;
-			inputs[0].ki.wVk = VK_OEM_PERIOD; // VK_OEM_PERIOD in case '.' doesn't work
-
-			inputs[1].type = INPUT_KEYBOARD;
-			inputs[1].ki.wVk = VK_OEM_PERIOD;
-			inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-
-			inputs[2].type = INPUT_KEYBOARD;
-			inputs[2].ki.wVk = 'C';
-
-			inputs[3].type = INPUT_KEYBOARD;
-			inputs[3].ki.wVk = 'C';
-			inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-
-			inputs[4].type = INPUT_KEYBOARD;
-			inputs[4].ki.wVk = 'A';
-
-			inputs[5].type = INPUT_KEYBOARD;
-			inputs[5].ki.wVk = 'A';
-			inputs[5].ki.dwFlags = KEYEVENTF_KEYUP;
-
-			SendInput(ARRAYSIZE(inputs), inputs, sizeof INPUT);*/
-		}
-	}
-
-	return CallNextHookEx(hHook, nCode, wParam, lParam);
-}
 
 CCI::CCI(void) : CPlugIn(COMPATIBILITY_CODE, GLOBAL::name, GLOBAL::version, GLOBAL::authors, GLOBAL::license) {
 	RegisterTagItemType(GLOBAL::TAG_ITEM_CCI_NAME, GLOBAL::TAG_ITEM_CCI);
@@ -79,54 +29,59 @@ CCI::CCI(void) : CPlugIn(COMPATIBILITY_CODE, GLOBAL::name, GLOBAL::version, GLOB
 									 GLOBAL::TAG_FUNC_XFER, GLOBAL::name, GLOBAL::TAG_FUNC_RELEASE);
 	}
 
-	hHook = SetWindowsHookEx(WH_KEYBOARD_LL, llKeyboardProc, NULL, NULL);
-
 	DisplayUserMessage(GLOBAL::tag, GLOBAL::tag, std::format("Current Control Indicator ({}) loaded successfully!", GLOBAL::version).c_str(), true, true, false, false,
 					   false);
 }
 
 void __declspec(dllexport) EuroScopePlugInInit(CPlugIn **ppPlugInInstance) {
 	*ppPlugInInstance = GLOBAL::pPlugIn = new CCI();
-
-	const char* delClr = GLOBAL::pPlugIn->GetDataFromSettings(GLOBAL::SETTING_ATCO_DEL_CLR);
-	const char* gndClr = GLOBAL::pPlugIn->GetDataFromSettings(GLOBAL::SETTING_ATCO_GND_CLR);
-	const char* twrClr = GLOBAL::pPlugIn->GetDataFromSettings(GLOBAL::SETTING_ATCO_TWR_CLR);
-
-	if (delClr)
-		GLOBAL::ATCO_CLR_DEL = strToClr(delClr);
-
-	if (gndClr)
-		GLOBAL::ATCO_CLR_GND = strToClr(gndClr);
-
-	if (twrClr)
-		GLOBAL::ATCO_CLR_TWR = strToClr(twrClr);
+	GLOBAL::pSettings = new CCISettings("cciConfig.ini");
 }
 
 void __declspec(dllexport) EuroScopePlugInExit(void) {
-	if (hHook)
-		UnhookWindowsHookEx(hHook);
-
-	GLOBAL::pPlugIn->SaveDataToSettings(GLOBAL::SETTING_ATCO_DEL_CLR, "Color of DELIVERY GND ctrl", clrToStr(GLOBAL::ATCO_CLR_DEL));
-	GLOBAL::pPlugIn->SaveDataToSettings(GLOBAL::SETTING_ATCO_GND_CLR, "Color of GROUND GND ctrl", clrToStr(GLOBAL::ATCO_CLR_GND));
-	GLOBAL::pPlugIn->SaveDataToSettings(GLOBAL::SETTING_ATCO_TWR_CLR, "Color of TOWER GND ctrl", clrToStr(GLOBAL::ATCO_CLR_TWR));
-
+	delete GLOBAL::pSettings;
 	delete GLOBAL::pPlugIn;
 }
 
 void CCI::OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget, int ItemCode, int TagData,
 							 char sItemString[16], int *pColorCode, COLORREF *pRGB, double *pFontSize) {
 	if (ItemCode == GLOBAL::TAG_ITEM_CCI) {
-		auto activeStation = m_ATCMap.find(RadarTarget.GetCallsign());
-		if (activeStation != m_ATCMap.end()) {
-			gndStationToStr(activeStation->second, sItemString);
+		auto activeStation = GLOBAL::m_ATCMap.find(RadarTarget.GetCallsign());
+		if (activeStation != GLOBAL::m_ATCMap.end()) {
+			GLOBAL::GndStationToStr(activeStation->second, sItemString);
 
-			if (gndStationToClr(activeStation->second, pRGB))
+			if (GLOBAL::GndStationToClr(activeStation->second, pRGB))
 				*pColorCode = TAG_COLOR_RGB_DEFINED;
 		}
 	}
 }
 
 void CCI::OnFunctionCall(int FunctionId, const char *sItemString, POINT Pt, RECT Area) {
+	if (
+		FunctionId == GLOBAL::TAG_FUNC_ATCO_NONE
+		|| FunctionId == GLOBAL::TAG_FUNC_ATCO_DEL
+		|| FunctionId == GLOBAL::TAG_FUNC_ATCO_GND
+		|| FunctionId == GLOBAL::TAG_FUNC_ATCO_TWR
+	) {
+		if (strnlen_s(m_ModCs, 10) == 0) {
+			CRadarTarget rTarget = RadarTargetSelectASEL();
+			if (!rTarget.IsValid() || !rTarget.GetCorrelatedFlightPlan().IsValid())
+				return;
+
+			CFlightPlan fpln = rTarget.GetCorrelatedFlightPlan();
+			if (fpln.IsValid())
+				setActiveATCO(fpln, static_cast<GndStations>(FunctionId - GLOBAL::TAG_FUNC_ATCO_NONE));
+		} else {
+			CFlightPlan fpln = FlightPlanSelect(m_ModCs);
+			if (fpln.IsValid())
+				setActiveATCO(fpln, static_cast<GndStations>(FunctionId - GLOBAL::TAG_FUNC_ATCO_NONE));
+
+			memset(m_ModCs, 0, 10);
+		}
+
+		return;
+	}
+
 	CRadarTarget rTarget = RadarTargetSelectASEL();
 	if (!rTarget.IsValid() || !rTarget.GetCorrelatedFlightPlan().IsValid())
 		return;
@@ -152,20 +107,12 @@ void CCI::OnFunctionCall(int FunctionId, const char *sItemString, POINT Pt, RECT
 		case GLOBAL::TAG_FUNC_POPUP: {
 			GndStations activeStation = NONE;
 
-			auto entry = m_ATCMap.find(rTarget.GetCallsign());
-			if (entry != m_ATCMap.end())
+			auto entry = GLOBAL::m_ATCMap.find(rTarget.GetCallsign());
+			if (entry != GLOBAL::m_ATCMap.end())
 				activeStation = entry->second;
 
 			openATCPopup(activeStation, Area);
 
-			break;
-		}
-
-		case GLOBAL::TAG_FUNC_ATCO_NONE:
-		case GLOBAL::TAG_FUNC_ATCO_DEL:
-		case GLOBAL::TAG_FUNC_ATCO_GND:
-		case GLOBAL::TAG_FUNC_ATCO_TWR: {
-			setActiveATCO(rTarget.GetCorrelatedFlightPlan(), static_cast<GndStations>(FunctionId - 0xA001));
 			break;
 		}
 	}
@@ -186,17 +133,17 @@ void CCI::OnControllerPositionUpdate(CController Controller) {
 		m_MyStation = static_cast<GndStations>(fac - 1);
 
 		char atcBuf[4];
-		gndStationToStr(m_MyStation, atcBuf);
+		GLOBAL::GndStationToStr(m_MyStation, atcBuf);
 	}
 
 	if (m_MyStation != oldStation)
-		m_ATCMap.clear();
+		GLOBAL::m_ATCMap.clear();
 }
 
 void CCI::OnFlightPlanDisconnect(CFlightPlan FlightPlan) {
-	if (m_ATCMap.contains(FlightPlan.GetCallsign())) {
+	if (GLOBAL::m_ATCMap.contains(FlightPlan.GetCallsign())) {
 		m_FpList.RemoveFpFromTheList(FlightPlan);
-		m_ATCMap.erase(FlightPlan.GetCallsign());
+		GLOBAL::m_ATCMap.erase(FlightPlan.GetCallsign());
 	}
 }
 
@@ -209,8 +156,15 @@ bool CCI::OnCompileCommand(const char *sCommandLine) {
 	return false;
 }
 
+CRadarScreen *CCI::OnRadarScreenCreated(const char *sDisplayName, bool NeedRadarContent, bool GeoReferenced, bool CanBeSaved, bool CanBeCreated) {
+	return new CCIRadarScreen();
+}
+
 void CCI::setActiveATCO(const CFlightPlan &fpln, GndStations station) {
-	m_ATCMap.erase(fpln.GetCallsign());
+	if (!fpln.IsValid())
+		return;
+
+	GLOBAL::m_ATCMap.erase(fpln.GetCallsign());
 	m_FpList.RemoveFpFromTheList(fpln);
 
 	switch (station) {
@@ -220,7 +174,7 @@ void CCI::setActiveATCO(const CFlightPlan &fpln, GndStations station) {
 			if (station == m_MyStation)
 				m_FpList.AddFpToTheList(fpln);
 
-			m_ATCMap.insert(std::make_pair(fpln.GetCallsign(), station));
+			GLOBAL::m_ATCMap.insert(std::make_pair(fpln.GetCallsign(), station));
 
 			break;
 		}
@@ -232,11 +186,15 @@ void CCI::setActiveATCO(const CFlightPlan &fpln, GndStations station) {
 	}
 }
 
+void CCI::setActiveATCO(const char* callsign, GndStations station) {
+	setActiveATCO(FlightPlanSelect(callsign), station);
+}
+
 void CCI::openATCPopup(GndStations activeStation, RECT area) {
 	char dBuf[4], gBuf[4], tBuf[4];
-	gndStationToStr(DELIVERY, dBuf);
-	gndStationToStr(GROUND, gBuf);
-	gndStationToStr(TOWER, tBuf);
+	GLOBAL::GndStationToStr(DELIVERY, dBuf);
+	GLOBAL::GndStationToStr(GROUND, gBuf);
+	GLOBAL::GndStationToStr(TOWER, tBuf);
 
 	OpenPopupList(area, GLOBAL::popupName, 3);
 
@@ -249,48 +207,7 @@ void CCI::openATCPopup(GndStations activeStation, RECT area) {
 	AddPopupListElement(tBuf, "", GLOBAL::TAG_FUNC_ATCO_TWR, false, POPUP_ELEMENT_NO_CHECKBOX, activeStation == TOWER);
 }
 
-void CCI::gndStationToStr(GndStations station, char dest[4]) {
-	switch (station) {
-		case DELIVERY: {
-			strcpy_s(dest, 4, "DEL");
-			break;
-		}
-
-		case GROUND: {
-			strcpy_s(dest, 4, "GND");
-			break;
-		}
-
-		case TOWER: {
-			strcpy_s(dest, 4, "TWR");
-			break;
-		}
-
-		case NONE:
-		default:
-			break;
-	}
-}
-
-bool CCI::gndStationToClr(GndStations station, COLORREF *dest) {
-	switch (station) {
-	case DELIVERY: {
-		*dest = GLOBAL::ATCO_CLR_DEL;
-		return true;
-	}
-
-	case GROUND: {
-		*dest = GLOBAL::ATCO_CLR_GND;
-		return true;
-	}
-
-	case TOWER: {
-		*dest = GLOBAL::ATCO_CLR_TWR;
-		return true;
-	}
-
-	case NONE:
-	default:
-		return false;
-	}
+void CCI::openATCPopup(GndStations activeStation, RECT area, const char* callsign) {
+	strcpy_s(m_ModCs, 10, callsign);
+	openATCPopup(activeStation, area);
 }

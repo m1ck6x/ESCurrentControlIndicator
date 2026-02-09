@@ -5,12 +5,12 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LocalDebuggerCommand>G:\Programs\EuroScope\EuroScope.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>"G:\Programs\EuroScope\Germany\EDWW\EDWW FIR - TWR PHX NIGHT.prf"</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>"G:\Programs\EuroScope\Germany\EDWW_DEV\EDWW FIR - TWR PHX NIGHT.prf"</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LocalDebuggerCommand>G:\Programs\EuroScope\EuroScope.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>"G:\Programs\EuroScope\Germany\EDWW\EDWW FIR - TWR PHX NIGHT.prf"</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>"G:\Programs\EuroScope\Germany\EDWW_DEV\EDWW FIR - TWR PHX NIGHT.prf"</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>

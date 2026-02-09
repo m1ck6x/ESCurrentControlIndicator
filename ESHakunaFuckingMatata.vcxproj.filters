@@ -27,12 +27,27 @@
     <ClInclude Include="include\EuroScopePlugIn.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CCIRadarScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\SimpleIni.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CCISettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="CCI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CCIRadarScreen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CCISettings.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

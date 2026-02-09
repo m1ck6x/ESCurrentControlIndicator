@@ -1,6 +1,9 @@
 #pragma once
 
 #include "EuroScopePlugIn.h"
+#include "CCISettings.h"
+#include <cstdio>
+#include <cstring>
 #include <string_view>
 #include <unordered_map>
 
@@ -8,65 +11,15 @@ using namespace EuroScopePlugIn;
 
 enum GndStations { NONE, DELIVERY, GROUND, TOWER };
 
-// Constant definitions
-// Also some not-so-constant definitions .-.
-namespace GLOBAL {
-	CPlugIn* pPlugIn;
-
-	const char* name = "Current Control Indicator";
-	const char* version = "b1.0.5";
-	const char* authors = "Michael Ott";
-	const char* license = "GPL v3";
-	const char* tag = "CCI";
-
-	const char* fpListName = "Actively controlling";
-	const char* screenName = "Active Control Display";
-	const char* popupName = "ATC";
-
-	// Tag item definitions
-	const int TAG_ITEM_CCI = 0xA000;
-	const char* TAG_ITEM_CCI_NAME = "Active Controller";
-
-	// Tag item functions
-	const int TAG_FUNC_XFER = 0xA000;
-	const char* TAG_FUNC_XFER_NAME = "Transfer GND ctrl";
-
-	const int TAG_FUNC_ASSUME = 0xAA00;
-	const char* TAG_FUNC_ASSUME_NAME = "Assume GND ctrl";
-
-	const int TAG_FUNC_RELEASE = 0xAAA0;
-	const char* TAG_FUNC_RELEASE_NAME = "Release GND ctrl";
-
-	const int TAG_FUNC_POPUP = 0xAAAA;
-	const char* TAG_FUNC_POPUP_NAME = "Open GND ctrl popup";
-
-	const int TAG_FUNC_ATCO_NONE = 0xA001;
-	const char* TAG_FUNC_ATCO_NONE_NAME = "Set GND ctrl: NONE";
-
-	const int TAG_FUNC_ATCO_DEL = 0xA002;
-	const char* TAG_FUNC_ATCO_DEL_NAME = "Set GND ctrl: DELIVERY";
-
-	const int TAG_FUNC_ATCO_GND = 0xA003;
-	const char* TAG_FUNC_ATCO_GND_NAME = "Set GND ctrl: GROUND";
-
-	const int TAG_FUNC_ATCO_TWR = 0xA004;
-	const char* TAG_FUNC_ATCO_TWR_NAME = "Set GND ctrl: TOWER";
-
-	const char* SETTING_ATCO_DEL_CLR = "atco_del_clr";
-	const char* SETTING_ATCO_GND_CLR = "atco_gnd_clr";
-	const char* SETTING_ATCO_TWR_CLR = "atco_twr_clr";
-
-	COLORREF ATCO_CLR_DEL = 0x00FFAA00;
-	COLORREF ATCO_CLR_GND = 0x0000FF00;
-	COLORREF ATCO_CLR_TWR = 0x0000CCFF;
-}
-
 class CCI : public CPlugIn {
-  public:
+public:
 	CCI(void);
 
-	void OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget, int ItemCode, int TagData, char sItemString[16],
-					  int *pColorCode, COLORREF *pRGB, double *pFontSize);
+	CFlightPlanList m_FpList;
+	GndStations m_MyStation = NONE;
+	char m_ModCs[10]{0};
+
+	void OnGetTagItem(CFlightPlan FlightPlan, CRadarTarget RadarTarget, int ItemCode, int TagData, char sItemString[16], int *pColorCode, COLORREF *pRGB, double *pFontSize);
 
 	void OnFunctionCall(int FunctionId, const char *sItemString, POINT Pt, RECT Area);
 
@@ -76,37 +29,140 @@ class CCI : public CPlugIn {
 
 	bool OnCompileCommand(const char *sCommandLine);
 
-  protected:
-	// TODO: If this EVER for some reson becomes anything sorted (like a vector or sth), make sure to NOT DO (2048) and instead use .reserve!
-	std::unordered_map<std::string_view, GndStations> m_ATCMap = std::unordered_map<std::string_view, GndStations>(2048);
-	CFlightPlanList m_FpList;
-	GndStations m_MyStation = NONE;
+	CRadarScreen *OnRadarScreenCreated(const char *sDisplayName, bool NeedRadarContent, bool GeoReferenced, bool CanBeSaved, bool CanBeCreated);
 
 	void setActiveATCO(const CFlightPlan &fpln, GndStations station);
+	void setActiveATCO(const char* callsign, GndStations station);
 	void openATCPopup(GndStations activeStation, RECT area);
-	void gndStationToStr(GndStations station, char dest[4]);
-
-	/// <returns>True if 'dest' was modified, false otherwise</returns>
-	bool gndStationToClr(GndStations station, COLORREF *dest);
+	void openATCPopup(GndStations activeStation, RECT area, const char* callsign);
 };
 
-inline const char *clrToStr(COLORREF clr) {
-	static char buffer[12];
+// Constant definitions
+// Also some not-so-constant definitions .-.
+inline namespace GLOBAL {
+	inline CCI *pPlugIn;
+	inline CCISettings *pSettings;
 
-	sprintf_s(buffer, sizeof(buffer), "%hhu,%hhu,%hhu", GetRValue(clr), GetGValue(clr), GetBValue(clr));
+	inline const char *name = "Current Control Indicator";
+	inline const char *version = "rc1.1.0";
+	inline const char *authors = "Michael Ott";
+	inline const char *license = "GPL v3";
+	inline const char *tag = "CCI";
 
-	return buffer;
-}
+	inline const char *fpListName = "Actively controlling";
+	inline const char *screenName = "Active Control Display";
+	inline const char *popupName = "ATC";
 
-inline COLORREF strToClr(const char *str) {
-	if (!str)
-		return 0x00000000;
+	// Radar screen object types & actions
+	inline const int OBJ_TYPE_CCI = 0xA000;
+	inline const int OBJ_TYPE_RTARGET = 0xAA00;
+	inline const int OBJ_ACTION_ASSUME = 1;
+	inline const int OBJ_ACTION_RELEASE = 2;
+	inline const int OBJ_ACTION_TRANSFER = 3;
+	inline const int OBJ_ACTION_SET_NONE = 4;
+	inline const int OBJ_ACTION_SET_DEL = 5;
+	inline const int OBJ_ACTION_SET_GND = 6;
+	inline const int OBJ_ACTION_SET_TWR = 7;
+	inline const int OBJ_ACTION_OPEN_POPUP = 8;
 
-	if (str[0] == '#')
-		++str;
+	// Tag item definitions
+	inline const int TAG_ITEM_CCI = 0xA000;
+	inline const char *TAG_ITEM_CCI_NAME = "Active Controller";
 
-	BYTE r = 0, g = 0, b = 0;
-	sscanf_s(str, "%hhu,%hhu,%hhu", &r, &g, &b);
+	// Tag item functions
+	inline const int TAG_FUNC_XFER = 0xA000;
+	inline const char *TAG_FUNC_XFER_NAME = "Transfer GND ctrl";
 
-	return RGB(r, g, b);
-}
+	inline const int TAG_FUNC_ASSUME = 0xAA00;
+	inline const char *TAG_FUNC_ASSUME_NAME = "Assume GND ctrl";
+
+	inline const int TAG_FUNC_RELEASE = 0xAAA0;
+	inline const char *TAG_FUNC_RELEASE_NAME = "Release GND ctrl";
+
+	inline const int TAG_FUNC_POPUP = 0xAAAA;
+	inline const char *TAG_FUNC_POPUP_NAME = "Open GND ctrl popup";
+
+	inline const int TAG_FUNC_ATCO_NONE = 0xA001;
+	inline const char *TAG_FUNC_ATCO_NONE_NAME = "Set GND ctrl: NONE";
+
+	inline const int TAG_FUNC_ATCO_DEL = 0xA002;
+	inline const char *TAG_FUNC_ATCO_DEL_NAME = "Set GND ctrl: DELIVERY";
+
+	inline const int TAG_FUNC_ATCO_GND = 0xA003;
+	inline const char *TAG_FUNC_ATCO_GND_NAME = "Set GND ctrl: GROUND";
+
+	inline const int TAG_FUNC_ATCO_TWR = 0xA004;
+	inline const char *TAG_FUNC_ATCO_TWR_NAME = "Set GND ctrl: TOWER";
+
+	// TODO: If this EVER for some reson becomes anything sorted (like a vector or sth), make sure to NOT DO (2048) and
+	// instead use .reserve!
+	inline std::unordered_map<std::string_view, GndStations> m_ATCMap = std::unordered_map<std::string_view, GndStations>(2048);
+
+	inline const char *ClrToStr(COLORREF clr) {
+		static char buffer[12];
+
+		sprintf_s(buffer, sizeof(buffer), "%hhu,%hhu,%hhu", GetRValue(clr), GetGValue(clr), GetBValue(clr));
+
+		return buffer;
+	}
+
+	inline COLORREF StrToClr(const char *str) {
+		if (!str)
+			return 0x00000000;
+
+		if (str[0] == '#')
+			++str;
+
+		BYTE r = 0, g = 0, b = 0;
+		sscanf_s(str, "%hhu,%hhu,%hhu", &r, &g, &b);
+
+		return RGB(r, g, b);
+	}
+
+	inline void GndStationToStr(GndStations station, char dest[4]) {
+		switch (station) {
+			case DELIVERY: {
+				strcpy_s(dest, 4, "DEL");
+				break;
+			}
+
+			case GROUND: {
+				strcpy_s(dest, 4, "GND");
+				break;
+			}
+
+			case TOWER: {
+				strcpy_s(dest, 4, "TWR");
+				break;
+			}
+
+			case NONE:
+			default:
+				break;
+			}
+	}
+
+	/// <returns>True if 'dest' was modified, false otherwise</returns>
+	inline bool GndStationToClr(GndStations station, COLORREF *dest) {
+		switch (station) {
+			case DELIVERY: {
+				*dest = GLOBAL::pSettings->getColor(Settings::ATCO_CLR_DEL);
+				return true;
+			}
+
+			case GROUND: {
+				*dest = GLOBAL::pSettings->getColor(Settings::ATCO_CLR_GND);
+				return true;
+			}
+
+			case TOWER: {
+				*dest = GLOBAL::pSettings->getColor(Settings::ATCO_CLR_TWR);
+				return true;
+			}
+
+			case NONE:
+			default:
+				return false;
+			}
+	}
+} // namespace GLOBAL
